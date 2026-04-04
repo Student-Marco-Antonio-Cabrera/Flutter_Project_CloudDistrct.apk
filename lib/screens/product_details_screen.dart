@@ -15,11 +15,13 @@ class ProductDetailsScreen extends StatefulWidget {
 class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   int _quantity = 1;
   String? _selectedFlavor;
+
   @override
   Widget build(BuildContext context) {
     final args = ModalRoute.of(context)?.settings.arguments;
     final productId = args is String ? args : null;
     final product = productId != null ? getProductById(productId) : null;
+
     if (product == null) {
       return GradientScaffold(
         appBar: AppBar(
@@ -39,19 +41,53 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         ),
       );
     }
+
     _selectedFlavor ??= product.availableFlavors.isNotEmpty
         ? product.availableFlavors.first
         : null;
+
     final cart = context.watch<CartProvider>();
     final theme = Theme.of(context);
+
     CartItem buildCartItem() => CartItem(
-      productId: product.id,
-      productName: product.name,
-      unitPrice: product.price,
-      quantity: _quantity,
-      flavor: _selectedFlavor ?? 'Default',
-      imagePath: product.imagePath,
-    );
+          productId: product.id,
+          productName: product.name,
+          unitPrice: product.price,
+          quantity: _quantity,
+          flavor: _selectedFlavor ?? 'Default',
+          imagePath: product.imagePath,
+        );
+
+    void addToCart() {
+      cart.addItem(buildCartItem());
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_outline,
+                    color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Added $_quantity × ${product.name} to cart',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            action: SnackBarAction(
+              label: 'View Cart',
+              textColor: Colors.white,
+              onPressed: () => Navigator.pushNamed(context, '/cart'),
+            ),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+    }
+
     return GradientScaffold(
       appBar: AppBar(
         title: const Text('Product Details'),
@@ -59,33 +95,87 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.shopping_cart_outlined,
+                    color: Colors.white),
+                onPressed: () => Navigator.pushNamed(context, '/cart'),
+              ),
+              if (cart.itemCount > 0)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: const BoxDecoration(
+                      color: Colors.redAccent,
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Text(
+                      '${cart.itemCount}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 4),
+        ],
       ),
       body: SafeArea(
         child: Column(
           children: [
+            // ── Scrollable content ─────────────────────────────────────────
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                 children: [
+                  // Product image
                   AspectRatio(
                     aspectRatio: 4 / 3,
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(18),
                       child: Container(
                         color: Colors.white.withValues(alpha: 0.1),
-                        child:
-                            product.imagePath != null &&
+                        child: product.imagePath != null &&
                                 product.imagePath!.isNotEmpty
-                            ? Image.asset(product.imagePath!, fit: BoxFit.cover)
-                            : const Icon(
-                                Icons.smoking_rooms_rounded,
-                                color: Colors.white70,
-                                size: 56,
+                            ? Image.asset(
+                                product.imagePath!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stack) =>
+                                    const Center(
+                                      child: Icon(
+                                        Icons.broken_image_outlined,
+                                        color: Colors.white54,
+                                        size: 56,
+                                      ),
+                                    ),
+                              )
+                            : const Center(
+                                child: Icon(
+                                  Icons.smoking_rooms_rounded,
+                                  color: Colors.white70,
+                                  size: 56,
+                                ),
                               ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
+
+                  // Name
                   Text(
                     product.name,
                     style: const TextStyle(
@@ -95,6 +185,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     ),
                   ),
                   const SizedBox(height: 6),
+
+                  // Price
                   Text(
                     '₱${product.price.toStringAsFixed(0)}',
                     style: TextStyle(
@@ -104,6 +196,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     ),
                   ),
                   const SizedBox(height: 6),
+
+                  // Stock
                   if (product.stock != null)
                     Text(
                       product.stock! > 0
@@ -118,6 +212,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       ),
                     ),
                   const SizedBox(height: 16),
+
+                  // Description
                   Text(
                     product.description ??
                         'Detailed description will appear here once configured.',
@@ -128,11 +224,13 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     ),
                   ),
                   const SizedBox(height: 18),
+
+                  // Flavor / variant chips
                   if (product.availableFlavors.isNotEmpty ||
                       (product.variants?.isNotEmpty ?? false)) ...[
-                    Text(
+                    const Text(
                       'Variants',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
                         fontSize: 15,
@@ -147,11 +245,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           (flavor) => ChoiceChip(
                             label: Text(flavor),
                             selected: _selectedFlavor == flavor,
-                            onSelected: (_) {
-                              setState(() {
-                                _selectedFlavor = flavor;
-                              });
-                            },
+                            onSelected: (_) =>
+                                setState(() => _selectedFlavor = flavor),
                           ),
                         ),
                         if (product.availableFlavors.isEmpty)
@@ -159,20 +254,19 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             (variant) => ChoiceChip(
                               label: Text(variant),
                               selected: _selectedFlavor == variant,
-                              onSelected: (_) {
-                                setState(() {
-                                  _selectedFlavor = variant;
-                                });
-                              },
+                              onSelected: (_) =>
+                                  setState(() => _selectedFlavor = variant),
                             ),
                           ),
                       ],
                     ),
                     const SizedBox(height: 18),
                   ],
-                  Text(
+
+                  // Quantity selector
+                  const Text(
                     'Quantity',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
                       fontSize: 15,
@@ -180,7 +274,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   ),
                   const SizedBox(height: 8),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.start,
                     children: [
                       IconButton.filledTonal(
                         onPressed: _quantity > 1
@@ -189,7 +282,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                         icon: const Icon(Icons.remove),
                       ),
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Text(
                           '$_quantity',
                           style: const TextStyle(
@@ -203,12 +296,24 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                         onPressed: () => setState(() => _quantity++),
                         icon: const Icon(Icons.add),
                       ),
+                      const Spacer(),
+                      // Running subtotal
+                      Text(
+                        '₱${(product.price * _quantity).toStringAsFixed(0)}',
+                        style: TextStyle(
+                          color: theme.colorScheme.primary,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 18),
-                  Text(
+
+                  // Reviews placeholder
+                  const Text(
                     'Reviews',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
                       fontSize: 15,
@@ -225,41 +330,22 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 ],
               ),
             ),
+
+            // ── Sticky Add to Cart bar (no shadow/dark overlay) ────────────
             Container(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.2),
-                border: Border(
-                  top: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-                ),
-              ),
               child: SafeArea(
                 top: false,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () {
-                          cart.addItem(buildCartItem());
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Added $_quantity x ${product.name} to cart',
-                              ),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.add_shopping_cart),
-                        label: const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 10),
-                          child: Text(
-                            'Add to Cart',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                      ),
+                child: FilledButton.icon(
+                  onPressed: addToCart,
+                  icon: const Icon(Icons.add_shopping_cart),
+                  label: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 10),
+                    child: Text(
+                      'Add to Cart',
+                      style: TextStyle(fontWeight: FontWeight.w700),
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),

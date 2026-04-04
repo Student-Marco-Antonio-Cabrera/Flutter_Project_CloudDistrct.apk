@@ -22,20 +22,31 @@ class AuthProvider extends Cubit<int> {
     _loadAccounts();
     _loadStoredUser();
   }
+
   final SharedPreferences _prefs;
   final Map<String, _StoredAccount> _accounts = {};
   final Random _random = Random();
+
   User? _user;
   bool _isLoggedIn = false;
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  // ── Two-factor state ──────────────────────────────────────────────────────
   User? _pendingTwoFactorUser;
   String? _pendingTwoFactorCode;
   DateTime? _pendingTwoFactorExpiry;
   String? _setupTwoFactorCode;
   DateTime? _setupTwoFactorExpiry;
+
+  // ── Public getters ────────────────────────────────────────────────────────
   User? get user => _user;
   bool get isLoggedIn => _isLoggedIn;
+  bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
   bool get isTwoFactorVerificationRequired => _pendingTwoFactorUser != null;
   String? get pendingTwoFactorCodeForDemo => _pendingTwoFactorCode;
+
   bool get canChangePassword {
     final account = _accountForCurrentUser;
     return account != null && account.hasPassword;
@@ -52,15 +63,36 @@ class AuthProvider extends Cubit<int> {
     return _accounts[_normalizeEmail(current.email)];
   }
 
+  // ── Helpers ───────────────────────────────────────────────────────────────
   String _normalizeEmail(String email) => email.trim().toLowerCase();
+
   User _userFromAccount(_StoredAccount account) => User(
-    id: account.id,
-    email: account.email,
-    displayName: account.displayName,
-    phone: account.phone,
-    profileImagePath: null,
-    addresses: const [],
-  );
+        id: account.id,
+        email: account.email,
+        displayName: account.displayName,
+        phone: account.phone,
+        profileImagePath: null,
+        addresses: const [],
+      );
+
+  void _setLoading(bool value) {
+    _isLoading = value;
+    _errorMessage = null;
+    _notify();
+  }
+
+  void _setError(String message) {
+    _isLoading = false;
+    _errorMessage = message;
+    _notify();
+  }
+
+  void clearError() {
+    _errorMessage = null;
+    _notify();
+  }
+
+  // ── Persistence ───────────────────────────────────────────────────────────
   void _loadAccounts() {
     final json = _prefs.getString(_keyAccounts);
     if (json == null) return;
@@ -119,10 +151,9 @@ class AuthProvider extends Cubit<int> {
     await _saveAccounts();
   }
 
-  String _generateSixDigitCode() {
-    final value = _random.nextInt(900000) + 100000;
-    return value.toString();
-  }
+  // ── Two-factor helpers ────────────────────────────────────────────────────
+  String _generateSixDigitCode() =>
+      (_random.nextInt(900000) + 100000).toString();
 
   bool _isExpired(DateTime? expiry) {
     if (expiry == null) return true;
@@ -132,6 +163,8 @@ class AuthProvider extends Cubit<int> {
   Future<void> _completeLogin(User user) async {
     _user = user;
     _isLoggedIn = true;
+    _isLoading = false;
+    _errorMessage = null;
     _clearPendingTwoFactor(notify: false);
     await _prefs.setBool(_keyLoggedIn, true);
     await _prefs.setString(_keyUser, jsonEncode(user.toJson()));
@@ -141,7 +174,8 @@ class AuthProvider extends Cubit<int> {
   void _startTwoFactorChallenge(User user) {
     _pendingTwoFactorUser = user;
     _pendingTwoFactorCode = _generateSixDigitCode();
-    _pendingTwoFactorExpiry = DateTime.now().add(const Duration(minutes: 5));
+    _pendingTwoFactorExpiry =
+        DateTime.now().add(const Duration(minutes: 5));
   }
 
   void _clearPendingTwoFactor({bool notify = true}) {
@@ -151,11 +185,19 @@ class AuthProvider extends Cubit<int> {
     if (notify) _notify();
   }
 
+  // ── Email / password login ────────────────────────────────────────────────
   Future<bool> login(String email, String password) async {
     final normalizedEmail = _normalizeEmail(email);
-    if (normalizedEmail.isEmpty || password.isEmpty) return false;
+    if (normalizedEmail.isEmpty || password.isEmpty) {
+      _setError('Email and password are required.');
+      return false;
+    }
+
+    _setLoading(true);
+
     var account = _accounts[normalizedEmail];
     if (account == null) {
+      // Auto-create account on first login (original behaviour preserved)
       account = _StoredAccount(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         email: normalizedEmail,
@@ -167,11 +209,21 @@ class AuthProvider extends Cubit<int> {
       _accounts[normalizedEmail] = account;
       await _saveAccounts();
     }
-    if (!account.hasPassword) return false;
-    if (account.password != password) return false;
+
+    if (!account.hasPassword) {
+      _setError(
+          'This account uses social sign-in. Please use Google or Facebook.');
+      return false;
+    }
+    if (account.password != password) {
+      _setError('Incorrect password. Please try again.');
+      return false;
+    }
+
     final resolvedUser = _userFromAccount(account);
     if (account.twoFactorEnabled) {
       _startTwoFactorChallenge(resolvedUser);
+      _isLoading = false;
       _notify();
       return true;
     }
@@ -179,6 +231,7 @@ class AuthProvider extends Cubit<int> {
     return true;
   }
 
+  // ── Register ──────────────────────────────────────────────────────────────
   Future<bool> register({
     required String email,
     required String password,
@@ -187,18 +240,25 @@ class AuthProvider extends Cubit<int> {
   }) async {
     final normalizedEmail = _normalizeEmail(email);
     final cleanDisplayName = displayName.trim();
-    final cleanPhone = phone == null || phone.trim().isEmpty
-        ? null
-        : phone.trim();
+    final cleanPhone =
+        (phone == null || phone.trim().isEmpty) ? null : phone.trim();
+
     if (normalizedEmail.isEmpty ||
         password.isEmpty ||
         cleanDisplayName.isEmpty) {
+      _setError('All fields are required.');
       return false;
     }
+
+    _setLoading(true);
+
     final existing = _accounts[normalizedEmail];
     if (existing != null && existing.hasPassword) {
+      _setError(
+          'An account with this email already exists. Please log in instead.');
       return false;
     }
+
     final account = _StoredAccount(
       id: existing?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
       email: normalizedEmail,
@@ -213,12 +273,65 @@ class AuthProvider extends Cubit<int> {
     return true;
   }
 
+  // ── Google sign-in ────────────────────────────────────────────────────────
+  Future<bool> signInWithGoogle() async {
+    _setLoading(true);
+    try {
+      final result = await SocialAuthService.signInWithGoogle();
+      if (result == null) {
+        // User cancelled — just stop loading, no error
+        _isLoading = false;
+        _notify();
+        return false;
+      }
+      return await signInWithProvider(
+        email: result.email,
+        displayName: result.displayName,
+      );
+    } on SocialAuthException catch (e) {
+      _setError(e.message);
+      return false;
+    } catch (e) {
+      _setError('Google sign-in failed. Please try again.');
+      return false;
+    }
+  }
+
+  // ── Facebook sign-in ──────────────────────────────────────────────────────
+  Future<bool> signInWithFacebook() async {
+    _setLoading(true);
+    try {
+      final result = await SocialAuthService.signInWithFacebook();
+      if (result == null) {
+        // User cancelled
+        _isLoading = false;
+        _notify();
+        return false;
+      }
+      return await signInWithProvider(
+        email: result.email,
+        displayName: result.displayName,
+      );
+    } on SocialAuthException catch (e) {
+      _setError(e.message);
+      return false;
+    } catch (e) {
+      _setError('Facebook sign-in failed. Please try again.');
+      return false;
+    }
+  }
+
+  // ── Generic social provider completion (shared by Google & Facebook) ──────
   Future<bool> signInWithProvider({
     required String email,
     required String displayName,
   }) async {
     final normalizedEmail = _normalizeEmail(email);
-    if (normalizedEmail.isEmpty) return false;
+    if (normalizedEmail.isEmpty) {
+      _setError('Could not retrieve email from social account.');
+      return false;
+    }
+
     final existing = _accounts[normalizedEmail];
     final account = _StoredAccount(
       id: existing?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
@@ -232,9 +345,11 @@ class AuthProvider extends Cubit<int> {
     );
     _accounts[normalizedEmail] = account;
     await _saveAccounts();
+
     final resolvedUser = _userFromAccount(account);
     if (account.twoFactorEnabled) {
       _startTwoFactorChallenge(resolvedUser);
+      _isLoading = false;
       _notify();
       return true;
     }
@@ -242,23 +357,27 @@ class AuthProvider extends Cubit<int> {
     return true;
   }
 
+  // ── Two-factor verification ───────────────────────────────────────────────
   Future<bool> verifyPendingTwoFactorCode(String code) async {
     final pendingUser = _pendingTwoFactorUser;
     final expectedCode = _pendingTwoFactorCode;
     if (pendingUser == null || expectedCode == null) return false;
     if (_isExpired(_pendingTwoFactorExpiry)) {
       _clearPendingTwoFactor();
+      _setError('Verification code expired. Please log in again.');
       return false;
     }
-    if (code.trim() != expectedCode) return false;
+    if (code.trim() != expectedCode) {
+      _setError('Incorrect verification code.');
+      return false;
+    }
     await _completeLogin(pendingUser);
     return true;
   }
 
-  void cancelPendingTwoFactorLogin() {
-    _clearPendingTwoFactor();
-  }
+  void cancelPendingTwoFactorLogin() => _clearPendingTwoFactor();
 
+  // ── Two-factor setup ──────────────────────────────────────────────────────
   String startTwoFactorSetup() {
     final account = _accountForCurrentUser;
     if (account == null) return '';
@@ -278,9 +397,13 @@ class AuthProvider extends Cubit<int> {
     if (account == null || expectedCode == null) return false;
     if (_isExpired(_setupTwoFactorExpiry)) {
       cancelTwoFactorSetup();
+      _setError('Setup code expired. Please try again.');
       return false;
     }
-    if (code.trim() != expectedCode) return false;
+    if (code.trim() != expectedCode) {
+      _setError('Incorrect verification code.');
+      return false;
+    }
     final key = _normalizeEmail(account.email);
     _accounts[key] = account.copyWith(twoFactorEnabled: true);
     cancelTwoFactorSetup();
@@ -298,6 +421,7 @@ class AuthProvider extends Cubit<int> {
     _notify();
   }
 
+  // ── Password change ───────────────────────────────────────────────────────
   Future<PasswordChangeResult> changePassword({
     required String currentPassword,
     required String newPassword,
@@ -318,9 +442,12 @@ class AuthProvider extends Cubit<int> {
     return PasswordChangeResult.success;
   }
 
+  // ── Logout ────────────────────────────────────────────────────────────────
   Future<void> logout() async {
     _user = null;
     _isLoggedIn = false;
+    _isLoading = false;
+    _errorMessage = null;
     _clearPendingTwoFactor(notify: false);
     cancelTwoFactorSetup();
     await _prefs.remove(_keyUser);
@@ -336,6 +463,7 @@ class AuthProvider extends Cubit<int> {
   }
 }
 
+// ── Internal account model ────────────────────────────────────────────────────
 class _StoredAccount {
   const _StoredAccount({
     required this.id,
@@ -345,31 +473,35 @@ class _StoredAccount {
     required this.password,
     required this.twoFactorEnabled,
   });
+
   final String id;
   final String email;
   final String displayName;
   final String? phone;
   final String? password;
   final bool twoFactorEnabled;
+
   bool get hasPassword => password != null && password!.isNotEmpty;
+
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'email': email,
-    'displayName': displayName,
-    'phone': phone,
-    'password': password,
-    'twoFactorEnabled': twoFactorEnabled,
-  };
+        'id': id,
+        'email': email,
+        'displayName': displayName,
+        'phone': phone,
+        'password': password,
+        'twoFactorEnabled': twoFactorEnabled,
+      };
+
   factory _StoredAccount.fromJson(Map<String, dynamic> json) => _StoredAccount(
-    id:
-        json['id'] as String? ??
-        DateTime.now().millisecondsSinceEpoch.toString(),
-    email: (json['email'] as String? ?? '').trim().toLowerCase(),
-    displayName: json['displayName'] as String? ?? '',
-    phone: json['phone'] as String?,
-    password: json['password'] as String?,
-    twoFactorEnabled: json['twoFactorEnabled'] as bool? ?? false,
-  );
+        id: json['id'] as String? ??
+            DateTime.now().millisecondsSinceEpoch.toString(),
+        email: (json['email'] as String? ?? '').trim().toLowerCase(),
+        displayName: json['displayName'] as String? ?? '',
+        phone: json['phone'] as String?,
+        password: json['password'] as String?,
+        twoFactorEnabled: json['twoFactorEnabled'] as bool? ?? false,
+      );
+
   _StoredAccount copyWith({
     String? id,
     String? email,
@@ -377,12 +509,13 @@ class _StoredAccount {
     String? phone,
     String? password,
     bool? twoFactorEnabled,
-  }) => _StoredAccount(
-    id: id ?? this.id,
-    email: email ?? this.email,
-    displayName: displayName ?? this.displayName,
-    phone: phone ?? this.phone,
-    password: password ?? this.password,
-    twoFactorEnabled: twoFactorEnabled ?? this.twoFactorEnabled,
-  );
+  }) =>
+      _StoredAccount(
+        id: id ?? this.id,
+        email: email ?? this.email,
+        displayName: displayName ?? this.displayName,
+        phone: phone ?? this.phone,
+        password: password ?? this.password,
+        twoFactorEnabled: twoFactorEnabled ?? this.twoFactorEnabled,
+      );
 }

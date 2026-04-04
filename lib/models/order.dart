@@ -1,6 +1,16 @@
 import 'cart_item.dart';
 
-enum OrderStatus { placed, preparing, shipped, outForDelivery, delivered }
+enum OrderStatus {
+  placed,
+  preparing,
+  shipped,
+  outForDelivery,
+  delivered;
+
+  // Backward-compatible aliases for legacy status names.
+  static const OrderStatus pending = OrderStatus.placed;
+  static const OrderStatus confirmed = OrderStatus.outForDelivery;
+}
 
 extension OrderStatusX on OrderStatus {
   String get label {
