@@ -5,7 +5,6 @@ import '../widgets/gradient_scaffold.dart';
 import '../widgets/toc_checkbox.dart';
 import '../widgets/vape_shop_logo_image.dart';
 import '../widgets/social_sign_in_buttons.dart';
-import '../services/social_auth_service.dart';
 import 'home_screen.dart';
 import 'toc_screen.dart';
 
@@ -94,7 +93,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       auth.cancelPendingTwoFactorLogin();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid verification code')),
+          SnackBar(
+            content: Text(auth.errorMessage ?? 'Invalid verification code.'),
+          ),
         );
       }
       return false;
@@ -124,9 +125,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       Navigator.of(context).pushReplacementNamed(HomeScreen.routeName);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Registration failed. Check fields or use another email',
+            auth.errorMessage ??
+                'Registration failed. Check your details and try again.',
           ),
         ),
       );
@@ -140,25 +142,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
       return;
     }
-    final result = await SocialAuthService.signInWithGoogle();
+    final auth = context.read<AuthProvider>();
+    final ok = await auth.signInWithGoogle();
     if (!mounted) return;
-    if (result == null) {
+    if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Google sign-in was cancelled or failed')),
+        SnackBar(
+          content: Text(auth.errorMessage ?? 'Google sign-in was cancelled.'),
+        ),
       );
       return;
     }
-    final auth = context.read<AuthProvider>();
-    final ok = await auth.signInWithProvider(
-      email: result.email,
-      displayName: result.displayName,
-    );
-    if (!mounted) return;
-    if (ok) {
-      final verified = await _handleTwoFactorIfNeeded(auth);
-      if (!mounted || !verified) return;
-      Navigator.of(context).pushReplacementNamed(HomeScreen.routeName);
-    }
+    final verified = await _handleTwoFactorIfNeeded(auth);
+    if (!mounted || !verified) return;
+    Navigator.of(context).pushReplacementNamed(HomeScreen.routeName);
   }
 
   Future<void> _signInWithFacebook() async {
@@ -168,27 +165,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
       return;
     }
-    final result = await SocialAuthService.signInWithFacebook();
+    final auth = context.read<AuthProvider>();
+    final ok = await auth.signInWithFacebook();
     if (!mounted) return;
-    if (result == null) {
+    if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Facebook sign-in was cancelled or failed'),
+        SnackBar(
+          content: Text(auth.errorMessage ?? 'Facebook sign-in was cancelled.'),
         ),
       );
       return;
     }
-    final auth = context.read<AuthProvider>();
-    final ok = await auth.signInWithProvider(
-      email: result.email,
-      displayName: result.displayName,
-    );
-    if (!mounted) return;
-    if (ok) {
-      final verified = await _handleTwoFactorIfNeeded(auth);
-      if (!mounted || !verified) return;
-      Navigator.of(context).pushReplacementNamed(HomeScreen.routeName);
-    }
+    final verified = await _handleTwoFactorIfNeeded(auth);
+    if (!mounted || !verified) return;
+    Navigator.of(context).pushReplacementNamed(HomeScreen.routeName);
   }
 
   @override

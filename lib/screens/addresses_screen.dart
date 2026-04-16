@@ -381,7 +381,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
 
               // ── Region ──────────────────────────────────────────
               DropdownButtonFormField<String>(
-                value: _selectedRegionCode,
+                initialValue: _selectedRegionCode,
                 decoration: const InputDecoration(labelText: 'Region'),
                 items: _regions
                     .map((r) => DropdownMenuItem(
@@ -398,7 +398,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
 
               // ── Province ─────────────────────────────────────────
               DropdownButtonFormField<String>(
-                value: _selectedProvinceCode,
+                initialValue: _selectedProvinceCode,
                 decoration: const InputDecoration(labelText: 'Province'),
                 items: _provinces
                     .map((p) => DropdownMenuItem(
@@ -415,7 +415,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
 
               // ── City / Municipality ───────────────────────────────
               DropdownButtonFormField<String>(
-                value: _selectedCityCode,
+                initialValue: _selectedCityCode,
                 decoration:
                     const InputDecoration(labelText: 'City / Municipality'),
                 items: _cities
@@ -433,7 +433,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
 
               // ── Barangay ─────────────────────────────────────────
               DropdownButtonFormField<String>(
-                value: _selectedBarangayCode,
+                initialValue: _selectedBarangayCode,
                 decoration: const InputDecoration(labelText: 'Barangay'),
                 items: _barangays
                     .map((b) => DropdownMenuItem(

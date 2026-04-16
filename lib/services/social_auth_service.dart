@@ -7,25 +7,42 @@ import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 class SocialAuthService {
   SocialAuthService._();
 
-  static final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: ['email', 'profile'],
-  );
+  static final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+  static Future<void>? _googleInitialization;
+
+  static Future<void> _ensureGoogleInitialized() {
+    return _googleInitialization ??= _googleSignIn.initialize();
+  }
 
   // ── Google ───────────────────────────────────────────────────────────────
 
   static Future<SocialAuthResult?> signInWithGoogle() async {
     try {
+      await _ensureGoogleInitialized();
+
       // Force account picker every time so the user can switch accounts
       await _googleSignIn.signOut();
 
-      final GoogleSignInAccount? account = await _googleSignIn.signIn();
-      if (account == null) return null; // user cancelled
+      if (!_googleSignIn.supportsAuthenticate()) {
+        throw const SocialAuthException(
+          'Google sign-in is not supported on this platform configuration.',
+        );
+      }
+
+      final GoogleSignInAccount account = await _googleSignIn.authenticate();
 
       return SocialAuthResult(
         email: account.email,
         displayName: account.displayName ?? account.email.split('@').first,
         photoUrl: account.photoUrl,
         provider: SocialProvider.google,
+      );
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        return null; // user cancelled
+      }
+      throw SocialAuthException(
+        'Google sign-in failed: ${e.description ?? e.code.name}',
       );
     } catch (e) {
       throw SocialAuthException('Google sign-in failed: $e');
@@ -34,6 +51,7 @@ class SocialAuthService {
 
   static Future<void> signOutGoogle() async {
     try {
+      await _ensureGoogleInitialized();
       await _googleSignIn.signOut();
     } catch (_) {}
   }

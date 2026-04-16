@@ -42,9 +42,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       );
     }
 
-    _selectedFlavor ??= product.availableFlavors.isNotEmpty
-        ? product.availableFlavors.first
-        : null;
+    _selectedFlavor ??= product.flavors.isNotEmpty ? product.flavors.first : 'Default';
 
     final cart = context.watch<CartProvider>();
     final theme = Theme.of(context);
@@ -55,7 +53,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           unitPrice: product.price,
           quantity: _quantity,
           flavor: _selectedFlavor ?? 'Default',
-          imagePath: product.imagePath,
+          imagePath: product.imageUrl,  // Note: CartItem uses imagePath field
         );
 
     void addToCart() {
@@ -137,22 +135,19 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // ── Scrollable content ─────────────────────────────────────────
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                 children: [
-                  // Product image
                   AspectRatio(
                     aspectRatio: 4 / 3,
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(18),
                       child: Container(
                         color: Colors.white.withValues(alpha: 0.1),
-                        child: product.imagePath != null &&
-                                product.imagePath!.isNotEmpty
+                        child: product.imageUrl.isNotEmpty
                             ? Image.asset(
-                                product.imagePath!,
+                                product.imageUrl,
                                 fit: BoxFit.cover,
                                 errorBuilder: (context, error, stack) =>
                                     const Center(
@@ -174,8 +169,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // Name
                   Text(
                     product.name,
                     style: const TextStyle(
@@ -185,8 +178,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     ),
                   ),
                   const SizedBox(height: 6),
-
-                  // Price
                   Text(
                     '₱${product.price.toStringAsFixed(0)}',
                     style: TextStyle(
@@ -196,8 +187,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     ),
                   ),
                   const SizedBox(height: 6),
-
-                  // Stock
                   if (product.stock != null)
                     Text(
                       product.stock! > 0
@@ -212,11 +201,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       ),
                     ),
                   const SizedBox(height: 16),
-
-                  // Description
                   Text(
-                    product.description ??
-                        'Detailed description will appear here once configured.',
+                    product.description,
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.92),
                       fontSize: 14,
@@ -224,12 +210,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     ),
                   ),
                   const SizedBox(height: 18),
-
-                  // Flavor / variant chips
-                  if (product.availableFlavors.isNotEmpty ||
-                      (product.variants?.isNotEmpty ?? false)) ...[
+                  if (product.flavors.isNotEmpty) ...[
                     const Text(
-                      'Variants',
+                      'Flavors',
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
@@ -240,30 +223,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: [
-                        ...product.availableFlavors.map(
-                          (flavor) => ChoiceChip(
+                      children: product.flavors.map((flavor) => ChoiceChip(
                             label: Text(flavor),
                             selected: _selectedFlavor == flavor,
-                            onSelected: (_) =>
-                                setState(() => _selectedFlavor = flavor),
-                          ),
-                        ),
-                        if (product.availableFlavors.isEmpty)
-                          ...?product.variants?.map(
-                            (variant) => ChoiceChip(
-                              label: Text(variant),
-                              selected: _selectedFlavor == variant,
-                              onSelected: (_) =>
-                                  setState(() => _selectedFlavor = variant),
-                            ),
-                          ),
-                      ],
+                            onSelected: (_) => setState(() => _selectedFlavor = flavor),
+                          )).toList(),
                     ),
                     const SizedBox(height: 18),
                   ],
-
-                  // Quantity selector
                   const Text(
                     'Quantity',
                     style: TextStyle(
@@ -297,7 +264,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                         icon: const Icon(Icons.add),
                       ),
                       const Spacer(),
-                      // Running subtotal
                       Text(
                         '₱${(product.price * _quantity).toStringAsFixed(0)}',
                         style: TextStyle(
@@ -309,8 +275,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     ],
                   ),
                   const SizedBox(height: 18),
-
-                  // Reviews placeholder
                   const Text(
                     'Reviews',
                     style: TextStyle(
@@ -330,8 +294,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 ],
               ),
             ),
-
-            // ── Sticky Add to Cart bar (no shadow/dark overlay) ────────────
             Container(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
               child: SafeArea(

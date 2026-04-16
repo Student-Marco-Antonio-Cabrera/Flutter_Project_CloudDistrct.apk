@@ -1,17 +1,26 @@
 import 'dart:convert';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/cart_item.dart';
 import '../models/order.dart';
+import '../services/database_service.dart';
 
 const _keyOrders = 'vapeshop_orders';
 
 class OrderProvider extends Cubit<int> {
-  OrderProvider(this._prefs) : super(0) {
-    _loadOrders();
+  OrderProvider(this._prefs)
+      : _databaseService = DatabaseService.instance,
+        super(0) {
+    _ready = _loadOrders();
   }
+
   final SharedPreferences _prefs;
+  final DatabaseService _databaseService;
+  late final Future<void> _ready;
   final List<Order> _orders = [];
+
   List<Order> get orders {
     final sorted = List<Order>.from(_orders);
     sorted.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -28,25 +37,25 @@ class OrderProvider extends Cubit<int> {
   }
 
   Future<void> _loadOrders() async {
-    final json = _prefs.getString(_keyOrders);
-    if (json != null) {
-      try {
-        final list = jsonDecode(json) as List<dynamic>;
-        _orders
-          ..clear()
-          ..addAll(
-            list.map((item) => Order.fromJson(item as Map<String, dynamic>)),
-          );
-      } catch (_) {
-        _orders.clear();
-      }
+    final storedOrders = await _databaseService.getOrders();
+    if (storedOrders.isNotEmpty) {
+      _orders
+        ..clear()
+        ..addAll(storedOrders);
+      _notify();
+      return;
     }
-    _notify();
-  }
 
-  Future<void> _saveOrders() async {
-    final list = _orders.map((order) => order.toJson()).toList();
-    await _prefs.setString(_keyOrders, jsonEncode(list));
+    final legacyOrders = _readLegacyOrders();
+    _orders
+      ..clear()
+      ..addAll(legacyOrders);
+
+    if (legacyOrders.isNotEmpty) {
+      await _databaseService.replaceOrders(legacyOrders);
+      await _prefs.remove(_keyOrders);
+    }
+
     _notify();
   }
 
@@ -62,6 +71,7 @@ class OrderProvider extends Cubit<int> {
     required String deliveryAddress,
     String? notes,
   }) async {
+    await _ready;
     final timestamp = DateTime.now();
     final order = Order(
       id: _buildOrderId(timestamp),
@@ -78,18 +88,35 @@ class OrderProvider extends Cubit<int> {
       notes: notes == null || notes.trim().isEmpty ? null : notes.trim(),
     );
     _orders.insert(0, order);
-    await _saveOrders();
+    await _databaseService.insertOrder(order);
+    _notify();
     return order;
   }
 
   Future<void> advanceOrderStatus(String orderId) async {
+    await _ready;
     final index = _orders.indexWhere((order) => order.id == orderId);
     if (index < 0) return;
     final current = _orders[index];
     if (current.status == OrderStatus.delivered) return;
     final nextStatus = OrderStatus.values[current.status.index + 1];
     _orders[index] = current.copyWith(status: nextStatus);
-    await _saveOrders();
+    await _databaseService.updateOrderStatus(orderId, nextStatus);
+    _notify();
+  }
+
+  List<Order> _readLegacyOrders() {
+    final json = _prefs.getString(_keyOrders);
+    if (json == null) return [];
+
+    try {
+      final list = jsonDecode(json) as List<dynamic>;
+      return list
+          .map((entry) => Order.fromJson(entry as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   static String _buildOrderId(DateTime timestamp) {

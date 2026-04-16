@@ -4,73 +4,10 @@ import '../models/cart_item.dart';
 import '../models/product.dart';
 
 final Uint8List _transparentPng = Uint8List.fromList(const <int>[
-  0x89,
-  0x50,
-  0x4E,
-  0x47,
-  0x0D,
-  0x0A,
-  0x1A,
-  0x0A,
-  0x00,
-  0x00,
-  0x00,
-  0x0D,
-  0x49,
-  0x48,
-  0x44,
-  0x52,
-  0x00,
-  0x00,
-  0x00,
-  0x01,
-  0x00,
-  0x00,
-  0x00,
-  0x01,
-  0x08,
-  0x06,
-  0x00,
-  0x00,
-  0x00,
-  0x1F,
-  0x15,
-  0xC4,
-  0x89,
-  0x00,
-  0x00,
-  0x00,
-  0x0A,
-  0x49,
-  0x44,
-  0x41,
-  0x54,
-  0x78,
-  0x9C,
-  0x63,
-  0x00,
-  0x01,
-  0x00,
-  0x00,
-  0x05,
-  0x00,
-  0x01,
-  0x0D,
-  0x0A,
-  0x2D,
-  0xB4,
-  0x00,
-  0x00,
-  0x00,
-  0x00,
-  0x49,
-  0x45,
-  0x4E,
-  0x44,
-  0xAE,
-  0x42,
-  0x60,
-  0x82,
+  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+  0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+  0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
 ]);
 
 class ProductCard extends StatefulWidget {
@@ -88,22 +25,24 @@ class ProductCard extends StatefulWidget {
 class _ProductCardState extends State<ProductCard> {
   int _quantity = 1;
   late String _selectedFlavor;
+
   @override
   void initState() {
     super.initState();
-    _selectedFlavor = widget.product.availableFlavors.isNotEmpty
-        ? widget.product.availableFlavors.first
+    _selectedFlavor = widget.product.flavors.isNotEmpty
+        ? widget.product.flavors.first
         : 'Default';
   }
 
   CartItem get _cartItem => CartItem(
-    productId: widget.product.id,
-    productName: widget.product.name,
-    unitPrice: widget.product.price,
-    quantity: _quantity,
-    flavor: _selectedFlavor,
-    imagePath: widget.product.imagePath,
-  );
+        productId: widget.product.id,
+        productName: widget.product.name,
+        unitPrice: widget.product.price,
+        quantity: _quantity,
+        flavor: _selectedFlavor,
+        imagePath: widget.product.imageUrl,
+      );
+
   @override
   Widget build(BuildContext context) {
     final p = widget.product;
@@ -129,9 +68,7 @@ class _ProductCardState extends State<ProductCard> {
           ),
           child: InkWell(
             borderRadius: BorderRadius.circular(18),
-            onTap: () {
-              Navigator.pushNamed(context, '/product-details', arguments: p.id);
-            },
+            onTap: () => Navigator.pushNamed(context, '/product-details', arguments: p.id),
             child: Padding(
               padding: EdgeInsets.all(isCompact ? 10 : 12),
               child: Column(
@@ -142,26 +79,23 @@ class _ProductCardState extends State<ProductCard> {
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
                         color: imageBgColor,
-                        child: p.imagePath != null && p.imagePath!.isNotEmpty
+                        child: p.imageUrl.isNotEmpty
                             ? FadeInImage(
                                 placeholder: MemoryImage(_transparentPng),
                                 image: ResizeImage(
-                                  AssetImage(p.imagePath!),
+                                  AssetImage(p.imageUrl),
                                   width: 900,
                                 ),
                                 fit: BoxFit.cover,
                                 placeholderFit: BoxFit.cover,
-                                fadeInDuration: const Duration(
-                                  milliseconds: 180,
+                                fadeInDuration: const Duration(milliseconds: 180),
+                                imageErrorBuilder: (context, error, stackTrace) => Center(
+                                  child: Icon(
+                                    Icons.broken_image_outlined,
+                                    size: isCompact ? 32 : 40,
+                                    color: Colors.grey.shade500,
+                                  ),
                                 ),
-                                imageErrorBuilder:
-                                    (context, error, stackTrace) => Center(
-                                      child: Icon(
-                                        Icons.broken_image_outlined,
-                                        size: isCompact ? 32 : 40,
-                                        color: Colors.grey.shade500,
-                                      ),
-                                    ),
                               )
                             : Center(
                                 child: Icon(
@@ -194,7 +128,7 @@ class _ProductCardState extends State<ProductCard> {
                     ),
                   ),
                   SizedBox(height: gap),
-                  if (p.availableFlavors.isNotEmpty)
+                  if (p.flavors.isNotEmpty)
                     DropdownButtonFormField<String>(
                       isDense: true,
                       initialValue: _selectedFlavor,
@@ -213,24 +147,18 @@ class _ProductCardState extends State<ProductCard> {
                         color: inputTextColor,
                         fontWeight: FontWeight.w500,
                       ),
-                      items: p.availableFlavors
-                          .map(
-                            (f) => DropdownMenuItem(
-                              value: f,
-                              child: Text(
-                                f,
-                                maxLines: 1,
-                                style: TextStyle(
-                                  color: inputTextColor,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                      items: p.flavors.map((f) => DropdownMenuItem(
+                            value: f,
+                            child: Text(
+                              f,
+                              maxLines: 1,
+                              style: TextStyle(
+                                color: inputTextColor,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
-                          )
-                          .toList(),
-                      onChanged: (v) {
-                        if (v != null) setState(() => _selectedFlavor = v);
-                      },
+                          )).toList(),
+                      onChanged: (v) => v != null ? setState(() => _selectedFlavor = v) : null,
                     )
                   else
                     Container(
@@ -242,9 +170,7 @@ class _ProductCardState extends State<ProductCard> {
                         color: inputFillColor,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: theme.colorScheme.primary.withValues(
-                            alpha: 0.25,
-                          ),
+                          color: theme.colorScheme.primary.withValues(alpha: 0.25),
                         ),
                       ),
                       child: Text(
@@ -264,14 +190,10 @@ class _ProductCardState extends State<ProductCard> {
                       IconButton.filledTonal(
                         icon: Icon(Icons.remove, size: iconSize),
                         visualDensity: VisualDensity.compact,
-                        onPressed: _quantity > 1
-                            ? () => setState(() => _quantity--)
-                            : null,
+                        onPressed: _quantity > 1 ? () => setState(() => _quantity--) : null,
                       ),
                       Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isCompact ? 10 : 14,
-                        ),
+                        padding: EdgeInsets.symmetric(horizontal: isCompact ? 10 : 14),
                         child: Text(
                           '$_quantity',
                           style: TextStyle(
@@ -293,11 +215,7 @@ class _ProductCardState extends State<ProductCard> {
                     child: FilledButton.icon(
                       onPressed: () => widget.onAddToCart(_cartItem),
                       icon: const Icon(Icons.add_shopping_cart),
-                      label: const Text(
-                        'Add to Cart',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      label: const Text('Add to Cart', maxLines: 1),
                       style: FilledButton.styleFrom(
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),

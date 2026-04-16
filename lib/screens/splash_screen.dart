@@ -15,14 +15,17 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  bool _hasNavigated = false;
+
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(seconds: 2), _navigate);
+    Future.delayed(const Duration(seconds: 5), _navigate);
   }
 
   void _navigate() {
-    if (!mounted) return;
+    if (_hasNavigated || !mounted) return;
+    _hasNavigated = true;
     final auth = context.read<AuthProvider>();
     Navigator.of(context).pushReplacementNamed(
       auth.isLoggedIn ? HomeScreen.routeName : LoginScreen.routeName,
@@ -33,27 +36,60 @@ class _SplashScreenState extends State<SplashScreen> {
   Widget build(BuildContext context) {
     return Container(
       decoration: AppTheme.gradientFor(context),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: Column(
-          children: [
-            const Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    VapeShopLogoImage(maxWidth: 280, maxHeight: 140),
-                    SizedBox(height: 32),
-                    CircularProgressIndicator(color: Colors.white),
-                  ],
-                ),
+        child: BlocConsumer<AuthProvider, int>(
+          listener: (context, state) {
+            final auth = context.read<AuthProvider>();
+            if (!_hasNavigated && !auth.isLoading && auth.errorMessage == null) {
+              Future.delayed(const Duration(milliseconds: 500), _navigate);
+            }
+          },
+          builder: (context, state) {
+            final auth = context.watch<AuthProvider>();
+            return Scaffold(
+              backgroundColor: Colors.transparent,
+              body: Stack(
+                children: [
+                  Column(
+                    children: [
+                      const Expanded(
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              VapeShopLogoImage(maxWidth: 280, maxHeight: 140),
+                              SizedBox(height: 32),
+                              CircularProgressIndicator(color: Colors.white),
+                            ],
+                          ),
+                        ),
+                      ),
+                      AppFooter.pleaseWait(),
+                    ],
+                  ),
+                  if (auth.errorMessage != null)
+                    Positioned(
+                      bottom: 200,
+                      left: 20,
+                      right: 20,
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.9),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          auth.errorMessage!,
+                          style: const TextStyle(color: Colors.white, fontSize: 14),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
               ),
-            ),
-            AppFooter.pleaseWait(),
-          ],
+            );
+          },
         ),
-      ),
     );
   }
 }
